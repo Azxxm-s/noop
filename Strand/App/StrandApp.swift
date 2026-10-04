@@ -26,9 +26,19 @@ struct StrandApp: App {
         let router = NavRouter()
         _router = StateObject(wrappedValue: router)
         NotificationPresenter.shared.onCoachBriefTapped = { [weak router] in router?.openCoach() }
+        let model = AppModel()
+        _model = StateObject(wrappedValue: model)
+        let liftSession = LiftSessionController(
+            buzz: { [weak model] loops in model?.buzz(loops: loops, gate: HapticPrefs.liftRest) },
+            setStrapHandler: { [weak model] handler in model?.strapDoubleTapOverride = handler },
+            log: { [weak model] line in model?.live.append(log: AppModel.stamped(line)) })
+        _liftSession = StateObject(wrappedValue: liftSession)
+        liftSession.resumeSaved()
     }
 
-    @StateObject private var model = AppModel()
+    @StateObject private var model: AppModel
+    /// Personal build: the Lift Log's live gym session on the Mac too (same controller iOS uses).
+    @StateObject private var liftSession: LiftSessionController
     /// Shared cross-screen navigation hook (e.g. Live → Devices). The macOS shell (`RootView`)
     /// observes it and drives the sidebar selection.
     @StateObject private var router: NavRouter
@@ -56,6 +66,7 @@ struct StrandApp: App {
                 .environmentObject(model.coach)
                 .environmentObject(router)
                 .environmentObject(UpdateStore.shared)
+                .environmentObject(liftSession)
                 // v5 L3: the shared stress check-in nudge surface, so the Breathe screen's passive
                 // card observes the SAME instance the central detector (AppModel.evaluateStress) posts to.
                 .environment(\.stressNudgeCenter, model.stressNudgeCenter)

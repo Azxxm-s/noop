@@ -10,10 +10,17 @@ struct ContentView: View {
     /// Local timestamp of the last terms acceptance — the on-device consent record (version + when).
     @AppStorage("noop.acceptedTermsAt") private var acceptedTermsAt = ""
     @State private var showWhatsNew = false
+    /// Personal build: Zee mode (focused dashboard) vs More mode (the original sidebar app).
+    @AppStorage(FocusPrefs.focusModeKey) private var zeeMode = true
+    @State private var showWeighIn = false
+    @EnvironmentObject private var liftSession: LiftSessionController
 
     var body: some View {
         ZStack {
-            RootView()
+            Group {
+                if zeeMode { ZeeMacShell() } else { RootView() }
+            }
+            .animation(.easeInOut(duration: 0.25), value: zeeMode)
             if !onboarded {
                 OnboardingWizard(onFinished: {
                     onboarded = true
@@ -64,6 +71,23 @@ struct ContentView: View {
             }
         }
         .onChangeCompat(of: acceptedTerms) { _ in showWhatsNewIfDue() }
+        // Personal build: the gym session sheet (Lift Log) and the once-a-day weigh-in.
+        .sheet(isPresented: $liftSession.isPresented) {
+            LiftSessionView { }
+        }
+        .sheet(isPresented: $showWeighIn) {
+            WeighInSheet()
+        }
+        .onAppear { maybePromptWeighIn() }
+        .onChangeCompat(of: onboarded) { _ in maybePromptWeighIn() }
+    }
+
+    private func maybePromptWeighIn() {
+        guard onboarded, acceptedTerms == Terms.currentVersion else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            guard WeightLog.shared.shouldPromptToday, !showWhatsNew, !liftSession.isPresented else { return }
+            showWeighIn = true
+        }
     }
 
     private func showWhatsNewIfDue() {

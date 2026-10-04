@@ -422,6 +422,9 @@ struct RootView: View {
                 .font(StrandFont.rounded(20, weight: .bold))
                 .foregroundStyle(StrandPalette.textPrimary)
             Spacer()
+            // Personal build: flip back to Zee mode.
+            ZeeModeSwitch(dark: false)
+                .scaleEffect(0.85)
         }
         // Top padding clears the traffic-light controls (the window hides its title bar, so they sit
         // over the sidebar's top edge); the lockup sits just below them.
