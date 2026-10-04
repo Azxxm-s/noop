@@ -102,7 +102,7 @@ targets:
       path: Strand/Resources/Info.plist
       properties:
         CFBundleName: NOOP
-        CFBundleDisplayName: NOOP
+        CFBundleDisplayName: NOOP Zee
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "198"
         LSMinimumSystemVersion: "13.0"
@@ -240,7 +240,7 @@ targets:
       path: StrandiOS/Resources/Info.plist
       properties:
         CFBundleName: NOOP
-        CFBundleDisplayName: NOOP
+        CFBundleDisplayName: NOOP Zee
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Surfaces APP_GROUP_ID to runtime (WidgetSnapshot.suiteName) so the App Group id isn't
