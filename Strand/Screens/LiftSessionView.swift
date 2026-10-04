@@ -191,6 +191,7 @@ struct LiftSessionView: View {
                         .font(StrandFont.caption)
                         .foregroundStyle(StrandPalette.textTertiary)
                 }
+                lastTimeBanner(item)
                 if let note = item.note, !note.isEmpty {
                     Text(note)
                         .font(StrandFont.footnote)
@@ -217,6 +218,55 @@ struct LiftSessionView: View {
             }
         }
         .id(index)
+    }
+
+    /// Personal build: "LAST TIME 80×8 · 80×8 · 75×7" plus one concrete way to beat it, so every
+    /// session is an explicit progressive-overload attempt.
+    @ViewBuilder
+    private func lastTimeBanner(_ item: LiftPlanItem) -> some View {
+        let last = session.lastTime(forExercise: item.exercise)
+        if !last.isEmpty {
+            let dict = last.mapValues { (kg: $0.weightKg, reps: $0.reps) }
+            let fmt: (Double) -> String = { display($0) }
+            let inc = unitSystem == .imperial ? 5 / UnitFormatter.poundsPerKilogram : 2.5
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("Last time").strandOverline()
+                    Text(lastTimeText(dict, fmt))
+                        .font(StrandFont.captionNumber)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                }
+                if let tip = overloadText(dict, item.targetRepsHigh, inc, fmt) {
+                    Label(tip, systemImage: "arrow.up.right.circle.fill")
+                        .font(StrandFont.caption)
+                        .foregroundStyle(StrandPalette.statusPositive)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(StrandPalette.statusPositive.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func lastTimeText(_ sets: [Int: (kg: Double?, reps: Int?)], _ fmt: (Double) -> String) -> String {
+        #if os(iOS)
+        return OverloadAdvisor.lastTimeLine(sets, format: fmt) ?? "—"
+        #else
+        return sets.keys.sorted().compactMap { k in sets[k]?.reps.map { "\(sets[k]?.kg.map(fmt) ?? "BW")×\($0)" } }
+            .joined(separator: " · ")
+        #endif
+    }
+
+    private func overloadText(_ sets: [Int: (kg: Double?, reps: Int?)], _ repsHigh: Int?, _ inc: Double,
+                              _ fmt: (Double) -> String) -> String? {
+        #if os(iOS)
+        return OverloadAdvisor.suggestion(sets, repsHigh: repsHigh, incrementKg: inc, format: fmt)
+        #else
+        return nil
+        #endif
     }
 
     /// Add one more set, or drop the last planned one — at the END of the exercise, because that is
