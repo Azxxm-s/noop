@@ -1,0 +1,82 @@
+# Personal build: NOOP Zee for iPhone (unsigned IPA for Sideloadly) and Mac (ad-hoc signed app).
+# Run from the Actions tab ("Zee build" → Run workflow). Results land in the "zee-latest" release.
+name: Zee build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: zee-build
+  cancel-in-progress: true
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      ver: ${{ steps.m.outputs.ver }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: m
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(grep -m1 'MARKETING_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          gh release delete zee-latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+          gh release create zee-latest --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "NOOP Zee (personal build) v$VER" \
+            --notes "iPhone: NOOP-Zee-ios.ipa (install with Sideloadly). Mac: NOOP-Zee-macos.zip (right-click → Open the first time). Built from ${GITHUB_SHA::7}."
+
+  ios:
+    needs: meta
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Build NOOPiOS (unsigned, Release)
+        run: |
+          set -o pipefail
+          xcodebuild -scheme NOOPiOS -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1 || { grep -E "error:" build.log | sort -u | head -60; tail -30 build.log; exit 1; }
+      - name: Package + attach IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APP=$(find build/dd/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -type d | head -1)
+          test -n "$APP" || { echo ".app not found"; exit 1; }
+          rm -rf "$APP/Watch"
+          Tools/prepare-ios-sideload-app.sh "$APP"
+          rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
+          zip -qr NOOP-Zee-ios.ipa Payload
+          gh release upload zee-latest NOOP-Zee-ios.ipa --repo "$GITHUB_REPOSITORY" --clobber
+
+  macos:
+    needs: meta
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Build NOOP.app (macOS, unsigned, universal)
+        run: |
+          set -o pipefail
+          xcodebuild -scheme Strand -configuration Release -destination 'generic/platform=macOS' \
+            ARCHS="x86_64 arm64" ONLY_ACTIVE_ARCH=NO -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1 || { grep -E "error:" build.log | sort -u | head -60; tail -30 build.log; exit 1; }
+      - name: Package + attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APP=$(find build/dd/Build/Products -maxdepth 3 -name '*.app' -type d | head -1)
+          test -n "$APP" || { echo ".app not found"; exit 1; }
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" NOOP-Zee-macos.zip
+          gh release upload zee-latest NOOP-Zee-macos.zip --repo "$GITHUB_REPOSITORY" --clobber
