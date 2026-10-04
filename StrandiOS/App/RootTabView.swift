@@ -22,6 +22,11 @@ struct RootTabView: View {
     /// attached and would otherwise keep posting AI notifications for a feature the wearer switched off.
     @AppStorage("noop.coachEnabled") private var coachEnabled = true
     @AppStorage("noop.bottomBarAutoHide") private var bottomBarAutoHide = false
+    /// Personal build: the Focus tab replaces Today as the first tab (Today stays one tap away inside it).
+    @AppStorage(FocusPrefs.focusModeKey) private var focusMode = true
+    /// Personal build: once-a-day weigh-in prompt.
+    @State private var showWeighIn = false
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The live gym session, owned at the app root — see `LiftSessionController`.
     @EnvironmentObject private var liftSession: LiftSessionController
@@ -126,7 +131,11 @@ struct RootTabView: View {
         // its dynamic interaction with scrolling content automatically; older supported releases use
         // the corresponding system material and safe-area behaviour from the same TabView.
         TabView(selection: nativeTabSelection) {
-            tab(todayTabRoot, "Today", "square.grid.2x2", path: $tabPaths[0], scrollSignal: scrollTop[0]).tag(0)
+            if focusMode {
+                tab(FocusView(), "Zee", "scope", path: $tabPaths[0], scrollSignal: scrollTop[0]).tag(0)
+            } else {
+                tab(todayTabRoot, "Today", "square.grid.2x2", path: $tabPaths[0], scrollSignal: scrollTop[0]).tag(0)
+            }
             tab(TrendsView(), "Trends", "chart.line.uptrend.xyaxis", path: $tabPaths[1], scrollSignal: scrollTop[1]).tag(1)
             tab(SleepView(), "Sleep", "bed.double", path: $tabPaths[2], scrollSignal: scrollTop[2]).tag(2)
             // K3: Coach promoted to a top-level tab (was behind the More list). The sparkles icon
@@ -286,6 +295,34 @@ struct RootTabView: View {
         // thrown in the user's face; they open it when they want it.
         .sheet(isPresented: $liftSession.isPresented) {
             LiftSessionView { }
+        }
+        // Personal build: daily weigh-in, asked the first time the app is opened each day.
+        .sheet(isPresented: $showWeighIn) {
+            WeighInSheet()
+        }
+        .onAppear { maybePromptWeighIn() }
+        .onChange(of: homeScreenQuickActionsEnabled) { _, _ in maybePromptWeighIn() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                maybePromptWeighIn()
+            } else if phase == .background {
+                let r = repo
+                Task {
+                    await FocusModel.shared.load(repo: r)
+                    await DailyEdgeNotifier.reschedule(repo: r)
+                }
+            }
+        }
+    }
+
+    /// Ask for today's weight once per day, after the first-run gates, never on top of another sheet.
+    private func maybePromptWeighIn() {
+        guard homeScreenQuickActionsEnabled else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            guard WeightLog.shared.shouldPromptToday,
+                  quickAction == nil, !showDevices, routedPillar == nil,
+                  !liftSession.isPresented, !showWeighIn else { return }
+            showWeighIn = true
         }
     }
 
@@ -462,7 +499,9 @@ struct RootTabView: View {
         NavigationStack(path: path) {
             ScreenScaffold(title: "More", subtitle: "Everything else, one tap away",
                            onRefresh: { await repo.refresh() },
-                           topBackground: liquidScaffoldSky()) {
+                           lazy: false,
+                           topBackground: liquidScaffoldSky(),
+                           trailing: { ZeeModeSwitch(dark: false) }) {
                 moreSection("Insights") {
                     MoreRow("What Moves You", "wand.and.sparkles", .insightsHub)
                     MoreRow("Intelligence", "brain.head.profile", .intelligence)
