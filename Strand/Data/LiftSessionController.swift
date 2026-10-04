@@ -360,6 +360,9 @@ final class LiftSessionController: ObservableObject {
 
     /// Hand over what the store knows about previous sessions. Called by the sheet once it has read
     /// it; safe to call again if it reloads.
+    /// Personal build: what this exercise was LAST session, by set number (for the "Last time" line).
+    func lastTime(forExercise name: String) -> [Int: LiftSetCarry] { lastSession[name] ?? [:] }
+
     func setLastSession(_ values: [String: [Int: LiftSetCarry]]) {
         lastSession = values
     }
